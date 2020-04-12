@@ -4,11 +4,18 @@ const io = std.io;
 const mem = std.mem;
 const testing = std.testing;
 
-fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) type {
+/// A scanner reads tokens from a stream. Tokens are byte slices delimited by a set of possible bytes.
+/// The BufferSize must be big enough to hold a single token
+///
+/// For example, here's how to scan for lines:
+///
+///  var line_scanner = Scanner(...).init(in_stream, "\n");
+///  while ()
+pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) type {
     return struct {
         const Self = @This();
 
-        arena: heap.ArenaAllocator,
+        allocator: *mem.Allocator,
 
         in_stream: InStreamType,
         delimiter_bytes: []const u8,
@@ -21,13 +28,11 @@ fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) type 
 
         remaining: usize,
 
-        pub fn deinit(self: *Self) void {
-            self.arena.deinit();
-        }
+        token: ?[]const u8,
 
         pub fn init(allocator: *mem.Allocator, in_stream: InStreamType, delimiter_bytes: []const u8) Self {
             return Self{
-                .arena = heap.ArenaAllocator.init(allocator),
+                .allocator = allocator,
                 .in_stream = in_stream,
                 .delimiter_bytes = delimiter_bytes,
                 .previous_buffer = undefined,
@@ -35,6 +40,7 @@ fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) type 
                 .buffer = undefined,
                 .buffer_slice = &[_]u8{},
                 .remaining = 0,
+                .token = null,
             };
         }
 
@@ -53,26 +59,34 @@ fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) type 
             return false;
         }
 
-        pub fn scan(self: *Self) !?[]const u8 {
+        pub fn getToken(self: Self) ?[]const u8 {
+            return self.token;
+        }
+
+        pub fn scan(self: *Self) !bool {
             comptime var i = 0;
 
             inline while (i < 2) : (i += 1) {
                 if (self.remaining == 0) _ = try self.refill();
-                if (self.remaining <= 0) return null;
+                if (self.remaining <= 0) return false;
 
                 var j: usize = 0;
                 while (j < self.buffer_slice.len) : (j += 1) {
                     if (self.isSplitByte(self.buffer_slice[j])) {
-                        const line = try mem.concat(&self.arena.allocator, u8, &[_][]const u8{
-                            self.previous_buffer_slice,
-                            self.buffer_slice[0..j],
-                        });
+                        const line = if (self.previous_buffer_slice.len > 0)
+                            try mem.concat(self.allocator, u8, &[_][]const u8{
+                                self.previous_buffer_slice,
+                                self.buffer_slice[0..j],
+                            })
+                        else
+                            self.buffer_slice[0..j];
 
                         mem.set(u8, &self.previous_buffer, 0);
                         self.buffer_slice = self.buffer_slice[j + 1 .. self.buffer_slice.len];
                         self.remaining -= 1;
 
-                        return line;
+                        self.token = line;
+                        return true;
                     }
                     self.remaining -= 1;
                 }
@@ -82,25 +96,29 @@ fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) type 
                 self.buffer_slice = &[_]u8{};
             }
 
-            return null;
+            return false;
         }
     };
 }
 
 test "line scanner: scan" {
+    var arena = heap.ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+
     const data = "foobar\nhello\rbonjour\x00";
     var fbs = io.fixedBufferStream(data);
     var in_stream = fbs.inStream();
 
-    var scanner = Scanner(@TypeOf(in_stream), 1024).init(testing.allocator, in_stream, "\r\n\x00");
-    defer scanner.deinit();
+    var scanner = Scanner(@TypeOf(in_stream), 1024).init(&arena.allocator, in_stream, "\r\n\x00");
 
-    var line = (try scanner.scan()).?;
-    testing.expectEqualSlices(u8, "foobar", line);
+    testing.expect(try scanner.scan());
+    testing.expectEqualSlices(u8, "foobar", scanner.getToken().?);
 
-    line = (try scanner.scan()).?;
-    testing.expectEqualSlices(u8, "hello", line);
+    testing.expect(try scanner.scan());
+    testing.expectEqualSlices(u8, "hello", scanner.getToken().?);
 
-    line = (try scanner.scan()).?;
-    testing.expectEqualSlices(u8, "bonjour", line);
+    testing.expect(try scanner.scan());
+    testing.expectEqualSlices(u8, "bonjour", scanner.getToken().?);
+
+    testing.expect((try scanner.scan()) == false);
 }

@@ -10,7 +10,11 @@ const testing = std.testing;
 /// For example, here's how to scan for lines:
 ///
 ///  var line_scanner = Scanner(...).init(in_stream, "\n");
-///  while ()
+///  while (try line_scanner.scan()) {
+///    var token = line_scanner.token();
+///  }
+///
+/// The token is only valid for a single scan call: if you want to keep it you need to duplicate it.
 pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) type {
     return struct {
         const Self = @This();
@@ -59,12 +63,25 @@ pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
             return false;
         }
 
+        /// Get the current token if any.
         pub fn getToken(self: Self) ?[]const u8 {
             return self.token;
         }
 
+        /// Scans for the next token.
+        /// Returns true if a token is found, false otherwise.
+        ///
+        /// The token can be obtained with `getToken()`.
+        /// The token is only valid for a single call, if you want
+        /// to keep a reference to it you need to duplicate it.
         pub fn scan(self: *Self) !bool {
             comptime var i = 0;
+
+            // Only need two iterations because we only have 2 buffers.
+            // If we would continue to loop we would lose data starting from the 3 iteration.
+            //
+            // We _could_ have multiple buffers to solve that but there's not much point when
+            // it's just easier to simply increase the buffer size.
 
             inline while (i < 2) : (i += 1) {
                 if (self.remaining == 0) _ = try self.refill();

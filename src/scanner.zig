@@ -100,6 +100,7 @@ pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
                             self.buffer_slice[0..j];
 
                         mem.set(u8, &self.previous_buffer, 0);
+                        self.previous_buffer_slice = &[_]u8{};
                         self.buffer_slice = self.buffer_slice[j + 1 .. self.buffer_slice.len];
                         self.remaining -= 1;
 

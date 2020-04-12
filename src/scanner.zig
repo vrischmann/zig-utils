@@ -32,7 +32,7 @@ pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
 
         remaining: usize,
 
-        token: ?[]const u8,
+        token: []const u8,
 
         pub fn init(allocator: *mem.Allocator, in_stream: InStreamType, delimiter_bytes: []const u8) Self {
             return Self{
@@ -44,7 +44,7 @@ pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
                 .buffer = undefined,
                 .buffer_slice = &[_]u8{},
                 .remaining = 0,
-                .token = null,
+                .token = undefined,
             };
         }
 
@@ -64,7 +64,8 @@ pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
         }
 
         /// Get the current token if any.
-        pub fn getToken(self: Self) ?[]const u8 {
+        /// If there is no previous succcessful call to `scan` the token returned is undefined memory.
+        pub fn getToken(self: Self) []const u8 {
             return self.token;
         }
 
@@ -89,6 +90,8 @@ pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
 
                 var j: usize = 0;
                 while (j < self.buffer_slice.len) : (j += 1) {
+                    self.remaining -= 1;
+
                     if (self.isSplitByte(self.buffer_slice[j])) {
                         // Only allocate a new string if the previous buffer is non empty.
                         const line = if (self.previous_buffer_slice.len > 0)
@@ -102,12 +105,10 @@ pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
                         mem.set(u8, &self.previous_buffer, 0);
                         self.previous_buffer_slice = &[_]u8{};
                         self.buffer_slice = self.buffer_slice[j + 1 .. self.buffer_slice.len];
-                        self.remaining -= 1;
 
                         self.token = line;
                         return true;
                     }
-                    self.remaining -= 1;
                 }
 
                 mem.copy(u8, &self.previous_buffer, self.buffer_slice);
@@ -131,13 +132,13 @@ fn testScanner(comptime BufferSize: comptime_int) !void {
     var scanner = Scanner(@TypeOf(in_stream), BufferSize).init(&arena.allocator, in_stream, "\r\n\x00");
 
     testing.expect(try scanner.scan());
-    testing.expectEqualSlices(u8, "foobar", scanner.getToken().?);
+    testing.expectEqualSlices(u8, "foobar", scanner.getToken());
 
     testing.expect(try scanner.scan());
-    testing.expectEqualSlices(u8, "hello", scanner.getToken().?);
+    testing.expectEqualSlices(u8, "hello", scanner.getToken());
 
     testing.expect(try scanner.scan());
-    testing.expectEqualSlices(u8, "bonjour", scanner.getToken().?);
+    testing.expectEqualSlices(u8, "bonjour", scanner.getToken());
 
     testing.expect((try scanner.scan()) == false);
 }

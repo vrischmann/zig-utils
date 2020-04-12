@@ -90,6 +90,7 @@ pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
                 var j: usize = 0;
                 while (j < self.buffer_slice.len) : (j += 1) {
                     if (self.isSplitByte(self.buffer_slice[j])) {
+                        // Only allocate a new string if the previous buffer is non empty.
                         const line = if (self.previous_buffer_slice.len > 0)
                             try mem.concat(self.allocator, u8, &[_][]const u8{
                                 self.previous_buffer_slice,

@@ -4,13 +4,14 @@ const io = std.io;
 const mem = std.mem;
 const testing = std.testing;
 
-fn LineScanner(comptime InStreamType: type, comptime BufferSize: comptime_int) type {
+fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) type {
     return struct {
         const Self = @This();
 
         arena: heap.ArenaAllocator,
 
         in_stream: InStreamType,
+        delimiter_bytes: []const u8,
 
         previous_buffer: [BufferSize]u8,
         previous_buffer_slice: []u8,
@@ -24,10 +25,11 @@ fn LineScanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
             self.arena.deinit();
         }
 
-        pub fn init(allocator: *mem.Allocator, in_stream: InStreamType) Self {
+        pub fn init(allocator: *mem.Allocator, in_stream: InStreamType, delimiter_bytes: []const u8) Self {
             return Self{
                 .arena = heap.ArenaAllocator.init(allocator),
                 .in_stream = in_stream,
+                .delimiter_bytes = delimiter_bytes,
                 .previous_buffer = undefined,
                 .previous_buffer_slice = &[_]u8{},
                 .buffer = undefined,
@@ -42,6 +44,15 @@ fn LineScanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
             self.remaining = n;
         }
 
+        fn isSplitByte(self: Self, c: u8) bool {
+            for (self.delimiter_bytes) |b| {
+                if (b == c) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
         pub fn scan(self: *Self) !?[]const u8 {
             comptime var i = 0;
 
@@ -51,7 +62,7 @@ fn LineScanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
 
                 var j: usize = 0;
                 while (j < self.buffer_slice.len) : (j += 1) {
-                    if (self.buffer_slice[j] == '\n') {
+                    if (self.isSplitByte(self.buffer_slice[j])) {
                         const line = try mem.concat(&self.arena.allocator, u8, &[_][]const u8{
                             self.previous_buffer_slice,
                             self.buffer_slice[0..j],
@@ -77,19 +88,19 @@ fn LineScanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
 }
 
 test "line scanner: scan" {
-    const data = "foobar\nhello\nbonjour\n";
+    const data = "foobar\nhello\rbonjour\x00";
     var fbs = io.fixedBufferStream(data);
     var in_stream = fbs.inStream();
 
-    var line_scanner = LineScanner(@TypeOf(in_stream), 1024).init(testing.allocator, in_stream);
-    defer line_scanner.deinit();
+    var scanner = Scanner(@TypeOf(in_stream), 1024).init(testing.allocator, in_stream, "\r\n\x00");
+    defer scanner.deinit();
 
-    var line = (try line_scanner.scan()).?;
+    var line = (try scanner.scan()).?;
     testing.expectEqualSlices(u8, "foobar", line);
 
-    line = (try line_scanner.scan()).?;
+    line = (try scanner.scan()).?;
     testing.expectEqualSlices(u8, "hello", line);
 
-    line = (try line_scanner.scan()).?;
+    line = (try scanner.scan()).?;
     testing.expectEqualSlices(u8, "bonjour", line);
 }

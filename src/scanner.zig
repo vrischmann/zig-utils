@@ -120,7 +120,7 @@ pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
     };
 }
 
-test "line scanner: scan" {
+fn testScanner(comptime BufferSize: comptime_int) !void {
     var arena = heap.ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
 
@@ -128,7 +128,7 @@ test "line scanner: scan" {
     var fbs = io.fixedBufferStream(data);
     var in_stream = fbs.inStream();
 
-    var scanner = Scanner(@TypeOf(in_stream), 1024).init(&arena.allocator, in_stream, "\r\n\x00");
+    var scanner = Scanner(@TypeOf(in_stream), BufferSize).init(&arena.allocator, in_stream, "\r\n\x00");
 
     testing.expect(try scanner.scan());
     testing.expectEqualSlices(u8, "foobar", scanner.getToken().?);
@@ -140,4 +140,10 @@ test "line scanner: scan" {
     testing.expectEqualSlices(u8, "bonjour", scanner.getToken().?);
 
     testing.expect((try scanner.scan()) == false);
+}
+
+test "line scanner: scan" {
+    try testScanner(8);
+    try testScanner(50);
+    try testScanner(1024);
 }

@@ -4,7 +4,7 @@ const io = std.io;
 const mem = std.mem;
 const testing = std.testing;
 
-fn LineScanner(comptime InStreamType: type) type {
+fn LineScanner(comptime InStreamType: type, comptime BufferSize: comptime_int) type {
     return struct {
         const Self = @This();
 
@@ -12,10 +12,10 @@ fn LineScanner(comptime InStreamType: type) type {
 
         in_stream: InStreamType,
 
-        previous_buffer: [4096]u8,
+        previous_buffer: [BufferSize]u8,
         previous_buffer_slice: []u8,
 
-        buffer: [4096]u8,
+        buffer: [BufferSize]u8,
         buffer_slice: []u8,
 
         remaining: usize,
@@ -81,7 +81,7 @@ test "line scanner: scan" {
     var fbs = io.fixedBufferStream(data);
     var in_stream = fbs.inStream();
 
-    var line_scanner = LineScanner(@TypeOf(in_stream)).init(testing.allocator, in_stream);
+    var line_scanner = LineScanner(@TypeOf(in_stream), 1024).init(testing.allocator, in_stream);
     defer line_scanner.deinit();
 
     var line = (try line_scanner.scan()).?;

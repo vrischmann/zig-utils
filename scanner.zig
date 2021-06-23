@@ -9,19 +9,19 @@ const testing = std.testing;
 ///
 /// For example, here's how to scan for lines:
 ///
-///  var line_scanner = Scanner(...).init(in_stream, "\n");
+///  var line_scanner = Scanner(...).init(reader, "\n");
 ///  while (try line_scanner.scan()) {
 ///    var token = line_scanner.token();
 ///  }
 ///
 /// The token is only valid for a single scan call: if you want to keep it you need to duplicate it.
-pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) type {
+pub fn Scanner(comptime Reader: type, comptime BufferSize: comptime_int) type {
     return struct {
         const Self = @This();
 
         allocator: *mem.Allocator,
 
-        in_stream: InStreamType,
+        reader: Reader,
         delimiter_bytes: []const u8,
 
         previous_buffer: [BufferSize]u8,
@@ -34,10 +34,10 @@ pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
 
         token: []const u8,
 
-        pub fn init(allocator: *mem.Allocator, in_stream: InStreamType, delimiter_bytes: []const u8) Self {
+        pub fn init(allocator: *mem.Allocator, reader: Reader, delimiter_bytes: []const u8) Self {
             return Self{
                 .allocator = allocator,
-                .in_stream = in_stream,
+                .reader = reader,
                 .delimiter_bytes = delimiter_bytes,
                 .previous_buffer = undefined,
                 .previous_buffer_slice = &[_]u8{},
@@ -49,7 +49,7 @@ pub fn Scanner(comptime InStreamType: type, comptime BufferSize: comptime_int) t
         }
 
         fn refill(self: *Self) !void {
-            const n = try self.in_stream.readAll(&self.buffer);
+            const n = try self.reader.readAll(&self.buffer);
             self.buffer_slice = self.buffer[0..n];
             self.remaining = n;
         }
@@ -127,20 +127,20 @@ fn testScanner(comptime BufferSize: comptime_int) !void {
 
     const data = "foobar\nhello\rbonjour\x00";
     var fbs = io.fixedBufferStream(data);
-    var in_stream = fbs.inStream();
+    var reader = fbs.reader();
 
-    var scanner = Scanner(@TypeOf(in_stream), BufferSize).init(&arena.allocator, in_stream, "\r\n\x00");
+    var scanner = Scanner(@TypeOf(reader), BufferSize).init(&arena.allocator, reader, "\r\n\x00");
 
-    testing.expect(try scanner.scan());
-    testing.expectEqualSlices(u8, "foobar", scanner.getToken());
+    try testing.expect(try scanner.scan());
+    try testing.expectEqualSlices(u8, "foobar", scanner.getToken());
 
-    testing.expect(try scanner.scan());
-    testing.expectEqualSlices(u8, "hello", scanner.getToken());
+    try testing.expect(try scanner.scan());
+    try testing.expectEqualSlices(u8, "hello", scanner.getToken());
 
-    testing.expect(try scanner.scan());
-    testing.expectEqualSlices(u8, "bonjour", scanner.getToken());
+    try testing.expect(try scanner.scan());
+    try testing.expectEqualSlices(u8, "bonjour", scanner.getToken());
 
-    testing.expect((try scanner.scan()) == false);
+    try testing.expect((try scanner.scan()) == false);
 }
 
 test "line scanner: scan" {

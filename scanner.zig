@@ -19,7 +19,7 @@ pub fn Scanner(comptime Reader: type, comptime BufferSize: comptime_int) type {
     return struct {
         const Self = @This();
 
-        allocator: *mem.Allocator,
+        allocator: mem.Allocator,
 
         reader: Reader,
         delimiter_bytes: []const u8,
@@ -34,7 +34,7 @@ pub fn Scanner(comptime Reader: type, comptime BufferSize: comptime_int) type {
 
         token: []const u8,
 
-        pub fn init(allocator: *mem.Allocator, reader: Reader, delimiter_bytes: []const u8) Self {
+        pub fn init(allocator: mem.Allocator, reader: Reader, delimiter_bytes: []const u8) Self {
             return Self{
                 .allocator = allocator,
                 .reader = reader,
@@ -129,7 +129,7 @@ fn testScanner(comptime BufferSize: comptime_int) !void {
     var fbs = io.fixedBufferStream(data);
     var reader = fbs.reader();
 
-    var scanner = Scanner(@TypeOf(reader), BufferSize).init(&arena.allocator, reader, "\r\n\x00");
+    var scanner = Scanner(@TypeOf(reader), BufferSize).init(arena.allocator(), reader, "\r\n\x00");
 
     try testing.expect(try scanner.scan());
     try testing.expectEqualSlices(u8, "foobar", scanner.getToken());

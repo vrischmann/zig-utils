@@ -14,14 +14,14 @@ pub fn LineReader(comptime BufferSize: usize, comptime ReaderType: type) type {
     return struct {
         const Self = @This();
 
-        allocator: *mem.Allocator,
+        allocator: mem.Allocator,
         reader: ReaderType,
 
         data: std.ArrayList(u8),
         file_position: u64,
         index: usize,
 
-        pub fn init(allocator: *mem.Allocator, reader: ReaderType) !Self {
+        pub fn init(allocator: mem.Allocator, reader: ReaderType) !Self {
             return Self{
                 .allocator = allocator,
                 .reader = reader,
@@ -71,10 +71,6 @@ pub fn LineReader(comptime BufferSize: usize, comptime ReaderType: type) type {
 }
 
 test "line reader" {
-    var arena = heap.ArenaAllocator.init(testing.allocator);
-    defer arena.deinit();
-    var allocator = &arena.allocator;
-
     const TestCase = struct {
         buffer_size: comptime_int,
         input: []const u8,
@@ -117,14 +113,17 @@ test "line reader" {
         var data_reader = data_fbs.reader();
 
         const LineReaderType = LineReader(tc.buffer_size, @TypeOf(data_reader));
-        var reader = try LineReaderType.init(allocator, data_reader);
+        var reader = try LineReaderType.init(testing.allocator, data_reader);
         defer reader.deinit();
 
-        var lines = std.ArrayList([]const u8).init(allocator);
-        defer lines.deinit();
+        var lines = std.ArrayList([]const u8).init(testing.allocator);
+        defer {
+            for (lines.items) |line| testing.allocator.free(line);
+            lines.deinit();
+        }
 
         while (try reader.next()) |line| {
-            try lines.append(try mem.dupe(allocator, u8, line.data));
+            try lines.append(try testing.allocator.dupe(u8, line.data));
         }
 
         try testing.expectEqual(@as(usize, tc.exp.len), lines.items.len);

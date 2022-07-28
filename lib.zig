@@ -6,6 +6,6 @@ usingnamespace @import("hybrid_logical_clock.zig");
 
 pub const io = @import("io.zig");
 
-test "" {
+test {
     std.testing.refAllDecls(@This());
 }
